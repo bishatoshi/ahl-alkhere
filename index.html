@@ -251,19 +251,18 @@
   <button onclick="logoutLetterSupervisor()" style="background-color: gray;">تسجيل خروج</button>
 </div>
 
-<!-- صفحة قسم التحقق -->
-<div id="verifySection" style="display:none; padding: 20px; text-align:right;">
+<div id="verifyPanel" style="display:none; padding: 20px; text-align: right;">
   <h2>قسم التحقق من مشرفات الحروف</h2>
-  <div id="pendingRequests" style="background:#fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-    جاري تحميل الطلبات...
-  </div>
-  <div style="margin-top: 30px;" class="edit-section">
-    <h3>تعديل بيانات الدخول لقسم التحقق</h3>
-    <input id="verifyNewUser" placeholder="اسم المستخدم الجديد">
-    <input id="verifyNewPass" type="password" placeholder="كلمة المرور الجديدة">
+  <div id="verifyList"></div>
+
+  <div class="edit-section">
+    <div class="edit-header"><i class="fa fa-user"></i><i class="fa fa-cog"></i> تغيير بيانات الدخول</div>
+    <input type="text" id="verifyNewUsername" placeholder="اسم المستخدم الجديد">
+    <input type="password" id="verifyNewPassword" placeholder="كلمة المرور الجديدة">
     <button onclick="updateVerifyLogin()">تحديث البيانات</button>
   </div>
 </div>
+
 
 
 <div class="login-container" id="loginSection">
@@ -279,7 +278,6 @@
     <br><br>
     <button onclick="showUserView()">دخول كمستخدم</button>
     <br><br>
-<button onclick="showLetterSupervisorForm()">أنا مشرفة حرف</button>
 
 
   </div>
@@ -329,7 +327,7 @@
     <option value="نساء">نساء</option>
   </select>
 
-  <button onclick="submitLetterSupervisor()">إرسال</button>
+ <button onclick="submitLetterSupervisor()" style="background-color: #004d26;">إرسال</button>
   <button onclick="backToLogin()" style="background-color: rgb(131, 5, 5);">رجوع</button>
 </div>
 
@@ -392,6 +390,11 @@
     <option>سنة</option>
     <option>أكثر من سنة</option>
   </select>
+  <select id="kafala_gender" required>
+  <option value="" disabled selected>اختر جنس</option>
+  <option value="رجال">رجل</option>
+  <option value="نساء">امرأة</option>
+</select>
   <button onclick="submitKafala()">إرسال</button>
   <button onclick="backToUser()" style="background-color: rgb(173, 18, 18);">رجوع</button>
   <h2><strong>ملاحظة:</strong> توجد التزامات مثل كرتونة رمضان وفرحة العيدين</h2>
@@ -401,516 +404,382 @@
 <footer>&copy; 2025 منظمة أهل الخير النسوية</footer>
 
 <script>
-  function loadFormsForSupervisor(letter, gender) {
-  const all = JSON.parse(localStorage.getItem("submissions") || "{}");
-  const list = all[`${letter}-${gender}`] || [];
-
-  const container = document.getElementById("staffForms");
-  container.innerHTML = "";
-
-  if (list.length === 0) {
-    container.innerHTML = "لا توجد استمارات حالياً.";
-    return;
-  }
-
-  list.forEach((data, index) => {
-    const div = document.createElement("div");
-    div.style.borderBottom = "1px solid #ccc";
-    div.style.padding = "10px";
-    div.innerHTML = `
-      <strong>${index + 1} - ${data.name}</strong><br>
-      📧 ${data.email}<br>
-      ☎️ ${data.phone}<br>
-      💼 ${data.job} - 🎓 ${data.degree}<br>
-      👶 عدد الأيتام: ${data.orphans} - المدة: ${data.period}
-    `;
-    container.appendChild(div);
-  });
+  function toggleFormsDropdown() {
+  const el = document.getElementById("formsDropdown");
+  el.style.display = el.style.display === "none" ? "block" : "none";
 }
 
+function toggleSection(id) {
+  const section = document.getElementById(id);
+  section.style.display = section.style.display === "none" ? "block" : "none";
+}
+
+function showFormsInStaffPage(letter, gender) {
+  const allForms = JSON.parse(localStorage.getItem("kafalaForms") || "[]");
+
+  const women = allForms.filter(f => f.gender === "نساء" && (!letter || f.name?.charAt(0) === letter));
+  const men = allForms.filter(f => f.gender === "رجال" && (!letter || f.name?.charAt(0) === letter));
+
+  document.getElementById("womenList").innerHTML = women.map(f => `<p>${f.name}</p>`).join("");
+  document.getElementById("menList").innerHTML = men.map(f => `<p>${f.name}</p>`).join("");
+}
+
+function renderSupervisorsCards() {
+  const container = document.getElementById("supervisorCards");
+  const all = JSON.parse(localStorage.getItem("verifiedSupervisors") || "{}");
+
+  container.innerHTML = Object.entries(all).map(([name, data]) => `
+    <div class="card" style="
+      background: #f2f2f2;
+      color: #000;
+      padding: 20px;
+      width: 220px;
+      text-align: center;
+      border-radius: 10px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    ">
+      <div class="name" style="font-weight: bold; font-size: 18px; margin-bottom: 10px;">${name}</div>
+      <div class="tag" style="background: #ddd; padding: 5px 10px; border-radius: 15px; margin: 5px 0;">الحرف: ${data.letter}</div>
+      <div class="tag" style="background: #ddd; padding: 5px 10px; border-radius: 15px;">القسم: ${data.gender}</div>
+    </div>
+  `).join("");
+}
+
+  if (!localStorage.getItem("letterSupervisors")) {
+  localStorage.setItem("letterSupervisors", "[]");
+}
   function submitLetterSupervisor() {
+  // 1. الحصول على القيم من النموذج
   const username = document.getElementById("letterSupervisor_username").value.trim();
   const password = document.getElementById("letterSupervisor_password").value.trim();
   const letter = document.getElementById("letterSupervisor_letter").value;
   const gender = document.getElementById("letterSupervisor_gender").value;
 
+  // 2. التحقق من الحقول المطلوبة
   if (!username || !password || !letter || !gender) {
-    alert("يرجى تعبئة جميع الحقول.");
+    alert("يجب تعبئة جميع الحقول المطلوبة");
     return;
   }
 
-  const newData = {
+  // 3. إنشاء كائن المشرفة الجديدة
+  const newSupervisor = {
     username,
     password,
     letter,
     gender,
-    verified: false // لسه محتاجة موافقة من قسم التحقق
+    verified: false,
+    registrationDate: new Date().toISOString()
   };
 
-  // جلب البيانات القديمة
-  let supervisors = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  supervisors.push(newData);
-  localStorage.setItem("letterSupervisors", JSON.stringify(supervisors));
+  try {
+    // 4. الحصول على البيانات الحالية
+    let supervisors = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
+    
+    // 5. التحقق من عدم وجود مستخدم بنفس الاسم
+    if (supervisors.some(s => s.username === username)) {
+      throw new Error("اسم المستخدم موجود بالفعل");
+    }
 
-  alert("✅ تم إرسال البيانات بنجاح، في انتظار التحقق.");
-  backToLogin();
-}
-
-  
-function approveSupervisor(index) {
-  const requests = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  const approved = requests.splice(index, 1)[0];
-  approved.verified = true;
-
-  // تأكد التخزين يكون object
-  let approvedAccounts = JSON.parse(localStorage.getItem("verifiedSupervisors") || "{}");
-  approvedAccounts[approved.username] = {
-    password: approved.password,
-    letter: approved.letter,
-    gender: approved.gender
-  };
-
-  localStorage.setItem("verifiedSupervisors", JSON.stringify(approvedAccounts));
-  localStorage.setItem("letterSupervisors", JSON.stringify(requests));
-  loadVerificationRequests();
-  alert("✅ تم قبول المشرفة");
-}
-
-function rejectSupervisor(index) {
-  let all = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  all.splice(index, 1);
-  localStorage.setItem("letterSupervisors", JSON.stringify(all));
-  loadVerificationRequests();
-  alert("❌ تم رفض الطلب وحذفه");
-}
-
-  function loadVerificationRequests() {
-  const container = document.getElementById("pendingRequests");
-  const all = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  const pending = all.filter(e => !e.verified);
-
-  if (pending.length === 0) {
-    container.innerHTML = "لا توجد طلبات معلقة حالياً.";
-    return;
+    // 6. إضافة المشرفة الجديدة
+    supervisors.push(newSupervisor);
+    
+    // 7. حفظ البيانات
+    localStorage.setItem("letterSupervisors", JSON.stringify(supervisors));
+    
+    // 8. إظهار رسالة النجاح
+    alert("✅ تم تسجيل المشرفة بنجاح\nسيتم مراجعة الطلب من قبل المسؤول");
+    
+    // 9. إعادة تعيين النموذج
+    document.getElementById("letterSupervisor_username").value = "";
+    document.getElementById("letterSupervisor_password").value = "";
+    document.getElementById("letterSupervisor_letter").selectedIndex = 0;
+    document.getElementById("letterSupervisor_gender").selectedIndex = 0;
+    
+    // 10. العودة للصفحة الرئيسية
+    backToLogin();
+    
+  } catch (error) {
+    alert(`❌ خطأ في التسجيل: ${error.message}`);
+    console.error("تفاصيل الخطأ:", error);
   }
-
-  container.innerHTML = "";
-  pending.forEach((req, i) => {
-    const div = document.createElement("div");
-    div.style.border = "1px solid #ccc";
-    div.style.padding = "10px";
-    div.style.marginBottom = "10px";
-    div.style.borderRadius = "8px";
-    div.style.background = "#fff";
-
-    div.innerHTML = `
-      <strong>${req.username}</strong> - الحرف: ${req.letter} - ${req.gender}<br>
-      <button onclick="approveSupervisor(${i})">✅ أوافق</button>
-      <button onclick="rejectSupervisor(${i})" style="background-color: red;">❌ رفض</button>
-    `;
-    container.appendChild(div);
-  });
-}
-
-  function updateVerifyLogin() {
-  const user = document.getElementById("verifyNewUser").value.trim();
-  const pass = document.getElementById("verifyNewPass").value.trim();
-  if (user && pass) {
-    localStorage.setItem("verify_user", user);
-    localStorage.setItem("verify_pass", pass);
-    alert("✅ تم تحديث بيانات الدخول لقسم التحقق");
-  } else {
-    alert("❌ يرجى تعبئة الحقول أولاً");
-  }
-}
-
-  // بيانات دخول قسم التحقق
-if (!localStorage.getItem("verify_user")) {
-  localStorage.setItem("verify_user", "verify");
-  localStorage.setItem("verify_pass", "9999");
-}
-
-function showVerifyLogin() {
-  const user = prompt("ادخل اسم المستخدم لقسم التحقق:");
-  const pass = prompt("ادخل كلمة المرور:");
-
-  if (user === localStorage.getItem("verify_user") && pass === localStorage.getItem("verify_pass")) {
-    document.getElementById("loginSection").style.display = "none";
-    document.getElementById("verifySection").style.display = "block";
-    loadVerificationRequests();
-  } else {
-    alert("بيانات غير صحيحة");
-  }
-}
-
-function updateVerifyLogin() {
-  const newUser = document.getElementById("verifyNewUser").value.trim();
-  const newPass = document.getElementById("verifyNewPass").value.trim();
-  if (newUser && newPass) {
-    localStorage.setItem("verify_user", newUser);
-    localStorage.setItem("verify_pass", newPass);
-    alert("✅ تم تحديث بيانات تسجيل الدخول لقسم التحقق.");
-  } else {
-    alert("يرجى ملء الحقول");
-  }
-}
-
-function loadVerificationRequests() {
-  const container = document.getElementById("pendingRequests");
-  const requests = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  if (!requests.length) {
-    container.innerHTML = "لا توجد طلبات حالياً.";
-    return;
-  }
-
-  container.innerHTML = "";
-  requests.forEach((req, index) => {
-    const box = document.createElement("div");
-    box.style.marginBottom = "20px";
-    box.style.padding = "15px";
-    box.style.border = "1px solid #ccc";
-    box.style.borderRadius = "8px";
-    box.innerHTML = `
-      👤 <strong>${req.username}</strong> | 🔒 ${req.password} <br>
-      📝 الحرف: <strong>${req.letter}</strong> - 👥 النوع: <strong>${req.gender}</strong><br><br>
-      <button onclick="approveSupervisor(${index})">✅ أوافق</button>
-      <button onclick="rejectSupervisor(${index})" style="background:red;">❌ رفض</button>
-    `;
-    container.appendChild(box);
-  });
-}
-
-function approveSupervisor(index) {
-  const requests = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  const approved = requests.splice(index, 1)[0];
-  approved.verified = true;
-
-  let approvedAccounts = JSON.parse(localStorage.getItem("verifiedSupervisors") || "[]");
-  approvedAccounts.push(approved);
-  localStorage.setItem("verifiedSupervisors", JSON.stringify(approvedAccounts));
-  localStorage.setItem("letterSupervisors", JSON.stringify(requests));
-  loadVerificationRequests();
-  alert("✅ تم قبول المشرفة");
-}
-
-
-function rejectSupervisor(index) {
-  const requests = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  requests.splice(index, 1);
-  localStorage.setItem("letterSupervisors", JSON.stringify(requests));
-  loadVerificationRequests();
-  alert("❌ تم رفض الطلب");
-}
-
-  function showLetterSupervisorForm() {
-  document.getElementById("loginSection").style.display = "none";
-  document.getElementById("letterSupervisorForm").style.display = "block";
 }
 
 function backToLogin() {
   document.getElementById("letterSupervisorForm").style.display = "none";
   document.getElementById("loginSection").style.display = "flex";
 }
-
-function submitLetterSupervisor() {
-  const username = document.getElementById("letterSupervisor_username").value.trim();
-  const password = document.getElementById("letterSupervisor_password").value.trim();
-  const letter = document.getElementById("letterSupervisor_letter").value;
-  const gender = document.getElementById("letterSupervisor_gender").value;
-
-  if (!username || !password || !letter || !gender) {
-    alert("يرجى تعبئة جميع الحقول.");
-    return;
-  }
-
-  const newData = {
-    username,
-    password,
-    letter,
-    gender,
-    verified: false
-  };
-
-  // تخزين في LocalStorage مؤقتاً
-  let requests = JSON.parse(localStorage.getItem("letterSupervisors") || "[]");
-  requests.push(newData);
-  localStorage.setItem("letterSupervisors", JSON.stringify(requests));
-
-  alert("✅ تم إرسال البيانات بنجاح، في انتظار التحقق.");
-  backToLogin();
-}
-
-
-
-function loadStaffForms(name) {
-  const allData = JSON.parse(localStorage.getItem("submissions") || "{}");
-  const list = allData[name] || [];
-  const container = document.getElementById("staffForms");
-
-  if (list.length === 0) {
-    container.innerHTML = "لا توجد استمارات حالياً.";
-    return;
-  }
-
-  container.innerHTML = "";
-  list.forEach((data, index) => {
-    const div = document.createElement("div");
-    div.style.borderBottom = "1px solid #ccc";
-    div.style.padding = "10px";
-    div.innerHTML = `
-      <strong>${index + 1} - ${data.name}</strong><br>
-      📧 ${data.email}<br>
-      ☎️ ${data.phone}<br>
-      💼 ${data.job} - 🎓 ${data.degree}<br>
-      👶 عدد الأيتام: ${data.orphans} - المدة: ${data.period}
-    `;
-    container.appendChild(div);
-  });
-}
-
-function searchForms() {
-  const term = document.getElementById("searchInput").value.trim();
-  if (!term) return loadStaffForms(currentStaff);
-
-  const allData = JSON.parse(localStorage.getItem("submissions") || "{}");
-  const list = allData[currentStaff] || [];
-  const container = document.getElementById("staffForms");
-
-  const filtered = list.filter(entry => entry.name.includes(term));
-  if (filtered.length === 0) {
-    container.innerHTML = "لا توجد نتائج مطابقة.";
-    return;
-  }
-
-  container.innerHTML = "";
-  filtered.forEach((data, index) => {
-    const div = document.createElement("div");
-    div.style.borderBottom = "1px solid #ccc";
-    div.style.padding = "10px";
-    div.innerHTML = `
-      <strong>${index + 1} - ${data.name}</strong><br>
-      📧 ${data.email}<br>
-      ☎️ ${data.phone}<br>
-      💼 ${data.job} - 🎓 ${data.degree}<br>
-      👶 عدد الأيتام: ${data.orphans} - المدة: ${data.period}
-    `;
-    container.appendChild(div);
-  });
-}
-
-function updateStaffLogin() {
-  const newUser = document.getElementById("staffNewUsername").value.trim();
-  const newPass = document.getElementById("staffNewPassword").value.trim();
-  if (newUser && newPass) {
-    alert(`تم تحديث اسم المستخدم إلى "${newUser}" وكلمة المرور إلى "${newPass}".\n⚠️ التحديث لا يتم حفظه بعد إعادة تحميل الصفحة.`);
-  } else {
-    alert("يرجى ملء الحقول أولاً.");
-  }
-}
-
+/* ----- التهيئة الأولية للتخزين المحلي ----- */
+function initializeStorage() {
   if (!localStorage.getItem("username")) {
-    localStorage.setItem("username", "ahlalkhere");
-    localStorage.setItem("password", "ahl");
+    localStorage.setItem("username", "admin");
+    localStorage.setItem("password", "1234");
   }
-
-  let announcements = JSON.parse(localStorage.getItem("announcements") || "[]");
-  let currentStaff = "";
-
-function showStaffPage(name) {
-  currentStaff = name;
-  document.getElementById("loginSection").style.display = "none";
-  document.getElementById("staffPage").style.display = "block";
-  document.getElementById("staffNameTitle").textContent = `قسم ${name}`;
-  loadStaffForms(name);
+  if (!localStorage.getItem("verify_user")) {
+    localStorage.setItem("verify_user", "verify");
+    localStorage.setItem("verify_pass", "9999");
+  }
+  if (!localStorage.getItem("letterSupervisors")) {
+    localStorage.setItem("letterSupervisors", "[]");
+  }
+  if (!localStorage.getItem("verifiedSupervisors")) {
+    localStorage.setItem("verifiedSupervisors", "{}");
+  }
+  if (!localStorage.getItem("announcements")) {
+    localStorage.setItem("announcements", "[]");
+  }
+  if (!localStorage.getItem("kafalaForms")) {
+    localStorage.setItem("kafalaForms", "[]");
+  }
+ if (!localStorage.getItem("staffAccounts")) {
+  localStorage.setItem("staffAccounts", JSON.stringify({
+    "madihah": "1111",
+    "samar": "2222", 
+    "lamia": "3333",
+    "hadeel": "4444",
+    "fai": "5555", // تمت إضافة الحساب الجديد
+    "mshrefa": "7777",
+    "hebaa" : "6666"
+    
+  }));
 }
-function login() {
-  const user = document.getElementById("username").value.trim().toLowerCase();
-  const pass = document.getElementById("password").value.trim();
+}
+initializeStorage();
 
-  if (user === "admin" && pass === "1234") {
+/* ----- دوال تسجيل الدخول والمشرفات ----- */
+function login() {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value.trim();
+
+  // دخول الأدمن
+  if (username === "admin" && password === "1234") {
     document.getElementById("loginSection").style.display = "none";
     document.getElementById("adminPanel").style.display = "block";
     displayAnnouncements();
     return;
   }
-  if (user === localStorage.getItem("verify_user") && pass === localStorage.getItem("verify_pass")) {
+
+  // دخول التحقق
+  if (username === localStorage.getItem("verify_user") && 
+      password === localStorage.getItem("verify_pass")) {
     document.getElementById("loginSection").style.display = "none";
-    document.getElementById("verifySection").style.display = "block";
-    loadVerificationRequests();
+    document.getElementById("verifyPanel").style.display = "block";
+    loadVerifyRequests();
     return;
   }
-  const supervisors = JSON.parse(localStorage.getItem("verifiedSupervisors") || "{}");
 
-if (supervisors[user] && supervisors[user].password === pass) {
-  // خلي الصفحة الرئيسية تختفي، وافتح صفحة المشرفة الجديدة
-  currentStaff = user;
-  document.getElementById("loginSection").style.display = "none";
-  document.getElementById("staffPage").style.display = "block";
-  document.getElementById("staffNameTitle").textContent = `مشرفة حرف ${supervisors[user].letter} (${supervisors[user].gender})`;
+  // دخول المشرفات
+  const staffAccounts = JSON.parse(localStorage.getItem("staffAccounts"));
+  if (staffAccounts[username] && staffAccounts[username] === password) {
+    if (username === "mshrefa") {
+      document.getElementById("loginSection").style.display = "none";
+      document.getElementById("letterSupervisorForm").style.display = "block";
+    } else {
+      showStaffPage(username);
+    }
+    return;
+  }
 
-  // تحميل الاستمارات المتوافقة مع الحرف والجنس
-  loadFormsForSupervisor(supervisors[user].letter, supervisors[user].gender);
-  return;
-}
-
-if (!localStorage.getItem("verify_user")) {
-  localStorage.setItem("verify_user", "verify");
-  localStorage.setItem("verify_pass", "9999");
-}
-// تحقق من مشرفات الحروف بعد التحقق
-let approvedSupervisors = Object.entries(JSON.parse(localStorage.getItem("verifiedSupervisors") || "{}"))
-  .map(([username, data]) => ({
-    username,
-    password: data.password,
-    letter: data.letter,
-    gender: data.gender
-  }));
-let supervisor = approvedSupervisors.find(s => s.username === user && s.password === pass);
-
-localStorage.removeItem("verifiedSupervisors"); // مرّة واحدة فقط لمسح التخزين القديم
-if (supervisor) {
-  // عرض صفحة المشرفة
-  currentStaff = supervisor.username;
-  currentLetter = supervisor.letter;
-  currentGender = supervisor.gender;
-
-  document.getElementById("loginSection").style.display = "none";
-  document.getElementById("staffPage").style.display = "block";
-  document.getElementById("staffNameTitle").textContent = `مشرفة حرف ${currentLetter} - ${supervisor.username}`;
-
-  // تصفية الكفلاء على حسب الحرف
-  loadFilteredKafala(supervisor.letter, supervisor.gender);
-  return;
-}
-let currentStaff = "";
-let currentLetter = "";
-let currentGender = "";
-
-
-
-  const staffLogins = {
-    "madihah": { password: "1111", name: "مديحة" },
-    "samar": { password: "2222", name: "سمر" },
-    "lamia": { password: "3333", name: "لمياء" },
-    "hadeel": { password: "4444", name: "هديل" }
-  };
-
-  if (staffLogins[user] && staffLogins[user].password === pass) {
-    showStaffPage(staffLogins[user].name);
+  // دخول مشرفات الحروف المعتمدة
+  const verifiedSupervisors = JSON.parse(localStorage.getItem("verifiedSupervisors") || "{}");
+  if (verifiedSupervisors[username] && verifiedSupervisors[username].password === password) {
+    document.getElementById("loginSection").style.display = "none";
+    document.getElementById("letterSupervisorPanel").style.display = "block";
+    document.getElementById("letterWelcome").textContent = `مرحباً، مشرفة حرف ${verifiedSupervisors[username].letter}`;
     return;
   }
 
   alert("بيانات الدخول غير صحيحة");
 }
-function loadFilteredKafala(letter, gender) {
-  const allData = JSON.parse(localStorage.getItem("submissions") || "{}");
-  const list = allData[gender] || [];
-  const container = document.getElementById("staffForms");
-
-  const filtered = list.filter(data => data.name.startsWith(letter));
-  if (filtered.length === 0) {
-    container.innerHTML = "لا توجد استمارات بهذا الحرف.";
-    return;
-  }
-
-  container.innerHTML = "";
-  filtered.forEach((data, index) => {
-    const div = document.createElement("div");
-    div.style.borderBottom = "1px solid #ccc";
-    div.style.padding = "10px";
-    div.innerHTML = `
-      <strong>${index + 1} - ${data.name}</strong><br>
-      📧 ${data.email}<br>
-      ☎️ ${data.phone}<br>
-      💼 ${data.job} - 🎓 ${data.degree}<br>
-      👶 عدد الأيتام: ${data.orphans} - المدة: ${data.period}
-    `;
-    container.appendChild(div);
-  });
+function togglePassword() {
+  const pwd = document.getElementById("password");
+  pwd.type = pwd.type === "password" ? "text" : "password";
 }
 
-  function togglePassword() {
-    const pwd = document.getElementById("password");
-    pwd.type = pwd.type === "password" ? "text" : "password";
+/* ----- دوال قسم التحقق ----- */
+function loadVerifyRequests() {
+  const container = document.getElementById("verifyList");
+  const requests = JSON.parse(localStorage.getItem("letterSupervisors") || []);
+  
+  container.innerHTML = requests.map((req, index) => `
+    <div style="border:1px solid #ddd; padding:15px; margin:10px 0; border-radius:8px;">
+      <p><strong>👤 المستخدم:</strong> ${req.username}</p>
+      <p><strong>🔠 الحرف:</strong> ${req.letter}</p>
+      <p><strong>👥 النوع:</strong> ${req.gender}</p>
+      <button onclick="approveRequest(${index})" style="background:#28a745; color:white; border:none; padding:8px 15px; border-radius:5px; margin:5px;">
+        ✅ موافقة
+      </button>
+      <button onclick="rejectRequest(${index})" style="background:#dc3545; color:white; border:none; padding:8px 15px; border-radius:5px; margin:5px;">
+        ❌ رفض
+      </button>
+    </div>
+  `).join("") || "<p style='text-align:center;'>لا توجد طلبات حالياً</p>";
+}
+
+function approveRequest(index) {
+  const requests = JSON.parse(localStorage.getItem("letterSupervisors"));
+  const approved = requests.splice(index, 1)[0];
+  
+  const approvedAccounts = JSON.parse(localStorage.getItem("verifiedSupervisors") || "{}");
+  approvedAccounts[approved.username] = {
+    password: approved.password,
+    letter: approved.letter,
+    gender: approved.gender
+  };
+  
+  const staffAccounts = JSON.parse(localStorage.getItem("staffAccounts"));
+  staffAccounts[approved.username] = approved.password;
+  
+  localStorage.setItem("verifiedSupervisors", JSON.stringify(approvedAccounts));
+  localStorage.setItem("letterSupervisors", JSON.stringify(requests));
+  localStorage.setItem("staffAccounts", JSON.stringify(staffAccounts));
+  
+  loadVerifyRequests();
+  alert("تم قبول المشرفة بنجاح وتم إنشاء حساب لها");
+}
+
+function rejectRequest(index) {
+  const requests = JSON.parse(localStorage.getItem("letterSupervisors"));
+  requests.splice(index, 1);
+  localStorage.setItem("letterSupervisors", JSON.stringify(requests));
+  loadVerifyRequests();
+}
+
+function updateVerifyLogin() {
+  const newUser = document.getElementById("verifyNewUsername").value.trim();
+  const newPass = document.getElementById("verifyNewPassword").value.trim();
+  
+  if (newUser && newPass) {
+    localStorage.setItem("verify_user", newUser);
+    localStorage.setItem("verify_pass", newPass);
+    alert("تم تحديث بيانات الدخول بنجاح");
+  } else {
+    alert("يجب تعبئة جميع الحقول");
+  }
+}
+
+/* ----- دوال المشرفات ----- */
+function showStaffPage(staffName) {
+  document.getElementById("loginSection").style.display = "none";
+  document.getElementById("staffPage").style.display = "block";
+
+  const verifiedSupervisors = JSON.parse(localStorage.getItem("verifiedSupervisors") || "{}");
+  const supervisorData = verifiedSupervisors[staffName];
+
+  // تحديد الحرف والجنس لكل مشرفة
+  let letter = null;
+  let gender = null;
+
+  const staffConfig = {
+    "madihah": { letter: "ا", gender: "نساء" },
+    "fai": { letter: "ا", gender: "رجال" },
+    "hadeel": { letter: "ب", gender: "نساء" },
+    "samar": { letter: null, gender: null },
+    "lamia": { letter: null, gender: null }
+  };
+
+  if (staffConfig[staffName]) {
+    letter = staffConfig[staffName].letter;
+    gender = staffConfig[staffName].gender;
+  } else if (supervisorData) {
+    letter = supervisorData.letter;
+    gender = supervisorData.gender;
   }
 
-  function showUserView() {
-    document.getElementById("loginSection").style.display = "none";
-    document.getElementById("userPanel").style.display = "block";
-    const container = document.getElementById("userAnnouncements");
-    container.innerHTML = announcements.length ? "" : "لا توجد إعلانات حالياً.";
-    announcements.forEach((text, index) => {
-      const el = document.createElement("div");
-      el.textContent = `${index + 1} - ${text}`;
-      container.appendChild(el);
-    });
-  }
+  document.getElementById("staffNameTitle").textContent = letter
+    ? `قسم حرف ${letter} (${gender})`
+    : `قسم ${staffName}`;
 
-  function addAnnouncement() {
-    const text = document.getElementById("newAnnouncement").value.trim();
-    if (!text || announcements.length >= 8) {
-      document.getElementById("limitMsg").textContent = "لا يمكن إضافة أكثر من 8 إعلانات في اليوم.";
-      return;
+  loadStaffForms(staffName, letter, gender);
+  showFormsInStaffPage(letter, gender);
+
+  // ✅ إظهار بوكسات المشرفات فقط في لمياء وسمر
+  if (staffName === "lamia" || staffName === "samar") {
+    document.getElementById("supervisorsSection").style.display = "block";
+    renderSupervisorsCards();
+  } else {
+    document.getElementById("supervisorsSection").style.display = "none";
+  }
+}
+
+function loadStaffForms(staffName, letter = null, gender = null) {
+  const allForms = JSON.parse(localStorage.getItem("kafalaForms") || []);
+  
+  // تصفية الاستمارات حسب الحرف والجنس إذا كان مشرفة حرف
+  const forms = letter 
+    ? allForms.filter(form => {
+        const firstLetter = form.name?.charAt(0); // الحرف الأول من اسم الكفيل
+        const formGender = form.gender; // جنس الكفيل (يجب إضافته في استمارة الكفالة)
+        
+        return firstLetter === letter && 
+               (!gender || formGender === gender);
+      })
+    : allForms;
+  
+  const container = document.getElementById("staffForms");
+  
+  container.innerHTML = forms.length ? forms.map((form, index) => `
+    <div style="border:1px solid #ddd; padding:15px; margin:10px 0; border-radius:8px;">
+      <p><strong>${index + 1} - ${form.name}</strong></p>
+      <p>📧 ${form.email} | ☎️ ${form.phone}</p>
+      <p>💼 ${form.job} | 🎓 ${form.degree}</p>
+      <p>👶 عدد الأيتام: ${form.orphans} | المدة: ${form.period}</p>
+      <p>🚻 الجنس: ${form.gender || 'غير محدد'}</p>
+    </div>
+  `).join("") : "<p>لا توجد استمارات حالياً</p>";
+}
+
+/* ----- دوال الإعلانات ----- */
+let announcements = JSON.parse(localStorage.getItem("announcements") || []);
+
+function addAnnouncement() {
+  const text = document.getElementById("newAnnouncement").value.trim();
+  if (!text) {
+    alert("يرجى إدخال نص الإعلان");
+    return;
+  }
+  
+  announcements.push(text);
+  localStorage.setItem("announcements", JSON.stringify(announcements));
+  document.getElementById("newAnnouncement").value = "";
+  displayAnnouncements();
+}
+
+function displayAnnouncements() {
+  const list = document.getElementById("announcementList");
+  list.innerHTML = announcements.map((text, index) => `
+    <div style="background:#d4f5dc; margin:10px; padding:15px; border-radius:8px;">
+      ${index + 1} - ${text}
+      <button onclick="deleteAnnouncement(${index})" style="float:left; background:red; color:white; border:none; border-radius:5px; padding:2px 8px;">
+        حذف
+      </button>
+    </div>
+  `).join("");
+}
+
+function deleteAnnouncement(index) {
+  announcements.splice(index, 1);
+  localStorage.setItem("announcements", JSON.stringify(announcements));
+  displayAnnouncements();
+}
+
+/* ----- دوال استمارة الكفالة ----- */
+function goToKafalaPage() {
+  document.getElementById("userPanel").style.display = "none";
+  document.getElementById("kafalaPage").style.display = "block";
+  
+  const select = document.getElementById("kafala_orphans");
+  if (select.options.length <= 1) {
+    for (let i = 1; i <= 100; i++) {
+      const option = document.createElement("option");
+      option.value = i;
+      option.text = `${i} يتيم`;
+      select.appendChild(option);
     }
-    announcements.push(text);
-    localStorage.setItem("announcements", JSON.stringify(announcements));
-    document.getElementById("newAnnouncement").value = "";
-    document.getElementById("limitMsg").textContent = "";
-    displayAnnouncements();
   }
+}
 
-  function displayAnnouncements() {
-    const list = document.getElementById("announcementList");
-    list.innerHTML = "";
-    announcements.forEach((text, index) => {
-      const item = document.createElement("div");
-      item.innerHTML = `${index + 1} - ${text} <button onclick="deleteAnnouncement(${index})"><i class='fa fa-trash'></i></button>`;
-      list.appendChild(item);
-    });
-  }
-
-  function deleteAnnouncement(index) {
-    announcements.splice(index, 1);
-    localStorage.setItem("announcements", JSON.stringify(announcements));
-    displayAnnouncements();
-  }
-
-  function updateLogin() {
-    const user = document.getElementById("newUsername").value.trim();
-    const pass = document.getElementById("newPassword").value.trim();
-    if (user && pass) {
-      localStorage.setItem("username", user);
-      localStorage.setItem("password", pass);
-      alert("تم تحديث بيانات الدخول");
-    }
-  }
-
-const staffAccounts = JSON.parse(localStorage.getItem("submissions")) || {
-  "مديحة": [], "سمر": [], "لمياء": [], "هديل": []
-};
-
-
-  function goToKafalaPage() {
-    document.getElementById("userPanel").style.display = "none";
-    document.getElementById("kafalaPage").style.display = "block";
-    const select = document.getElementById("kafala_orphans");
-    if (select.options.length <= 1) {
-      for (let i = 1; i <= 100; i++) {
-        let opt = document.createElement("option");
-        opt.value = i;
-        opt.text = `${i} يتيم`;
-        select.appendChild(opt);
-      }
-    }
-  }
-
-  function backToUser() {
-    document.getElementById("kafalaPage").style.display = "none";
-    document.getElementById("userPanel").style.display = "block";
-  }
-
-  function submitKafala() {
-  const newData = {
+function submitKafala() {
+  const formData = {
     name: document.getElementById("kafala_name").value,
     email: document.getElementById("kafala_email").value,
     phone: document.getElementById("kafala_phone").value,
@@ -920,42 +789,60 @@ const staffAccounts = JSON.parse(localStorage.getItem("submissions")) || {
     date: document.getElementById("kafala_time").value,
     orphans: document.getElementById("kafala_orphans").value,
     period: document.getElementById("kafala_period").value,
-    gender: document.querySelector('#letterSupervisor_gender')?.value || "غير محدد"
+    gender: document.getElementById("kafala_gender").value // تمت إضافة هذا الحقل
   };
 
-  // جلب البيانات القديمة
-  let oldData = JSON.parse(localStorage.getItem("kafalaForms") || "[]");
-  oldData.push(newData);
-
-  // تخزين جديد
-  localStorage.setItem("kafalaForms", JSON.stringify(oldData));
-
-  alert("✅ تم حفظ استمارة الكفالة بنجاح!");
-
-  // تنظيف الحقول
-  document.getElementById("kafala_name").value = "";
-  document.getElementById("kafala_email").value = "";
-  document.getElementById("kafala_phone").value = "";
-  document.getElementById("kafala_phone2").value = "";
-  document.getElementById("kafala_job").value = "";
-  document.getElementById("kafala_degree").value = "";
-  document.getElementById("kafala_time").value = "";
-  document.getElementById("kafala_orphans").value = "";
-  document.getElementById("kafala_period").value = "";
-
+  const kafalas = JSON.parse(localStorage.getItem("kafalaForms") || []);
+  kafalas.push(formData);
+  localStorage.setItem("kafalaForms", JSON.stringify(kafalas));
+  
+  alert("تم تقديم الاستمارة بنجاح");
   backToUser();
+}
+/* ----- دوال الواجهة العامة ----- */
+function showUserView() {
+  document.getElementById("loginSection").style.display = "none";
+  document.getElementById("userPanel").style.display = "block";
+  
+  const container = document.getElementById("userAnnouncements");
+  container.innerHTML = announcements.length ? 
+    announcements.map((text, index) => `<p>${index + 1} - ${text}</p>`).join("") : 
+    "<p>لا توجد إعلانات حالياً</p>";
 }
 
 </script>
 <!-- صفحة الموظف -->
 <div id="staffPage" style="display:none; padding: 20px;">
+  <!-- ✅ Dropdown الاستمارات (يظهر لكل المشرفات) -->
+    <div class="edit-section">
+      <div class="edit-header" onclick="toggleFormsDropdown()" style="cursor:pointer;">
+        📂 الاستمارات <span style="float:left;">⌄</span>
+      </div>
+      <div id="formsDropdown" style="display:none; margin-top: 10px;">
+        <div style="margin-bottom: 10px;">
+          <div onclick="toggleSection('womenForms')" style="cursor:pointer; font-weight:bold;">👩 استمارات النساء</div>
+          <div id="womenForms" style="display:none; margin-top:10px;">
+            <input type="text" id="womenSearch" placeholder="🔍 ابحث عن استمارة نساء" style="width: 100%; margin-bottom: 10px;">
+            <div id="womenList"></div>
+          </div>
+        </div>
+        <div>
+          <div onclick="toggleSection('menForms')" style="cursor:pointer; font-weight:bold;">👨 استمارات الرجال</div>
+          <div id="menForms" style="display:none; margin-top:10px;">
+            <input type="text" id="menSearch" placeholder="🔍 ابحث عن استمارة رجال" style="width: 100%; margin-bottom: 10px;">
+            <div id="menList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+<!-- ✅ بوكسات المشرفات (تظهر فقط في لمياء وسمر) -->
+<div id="supervisorsSection" style="display:none; margin-top: 40px;">
+  <h2>مشرفاتي</h2>
+  <div class="card-container" id="supervisorCards" style="display:flex; flex-wrap:wrap; gap:20px;"></div>
+</div>
+
   <h2 id="staffNameTitle">قسم الموظف</h2>
-
-  <div style="margin: 20px 0;">
-    <input type="text" id="searchInput" placeholder="ابحث عن اسم الكفيل" style="width: 80%; padding: 10px; border-radius: 8px; font-size: 16px;">
-    <button onclick="searchForms()">🔍</button>
-  </div>
-
   <div id="staffForms" style="background-color: #f9f9f9; padding: 15px; border-radius: 10px;"></div>
 
   <div class="edit-section">
